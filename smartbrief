@@ -111,7 +111,12 @@ const extractJSON = str => {
 const API_URL = "https://api.anthropic.com/v1/messages";
 const API_MODEL = "claude-sonnet-4-20250514";
 
+// API key almacenada en memoria de sesión
+let ANTHROPIC_KEY = "";
+
 const callClaude = async (prompt, withSearch=false, extraHeaders={}) => {
+  if (!ANTHROPIC_KEY) throw new Error("API key no configurada");
+  extraHeaders["x-api-key"] = ANTHROPIC_KEY;
   const messages = [{role:"user", content:prompt}];
   const tools = withSearch ? [{type:"web_search_20250305",name:"web_search"}] : [];
   for(let i=0;i<6;i++){
@@ -159,6 +164,7 @@ const CHK2 = [
 ];
 
 function SmartBrief() {
+  const [apiKey,setApiKey]=useState("");
   const [phase,setPhase]=useState("upload");
   const [files,setFiles]=useState({plan:null,roster:null});
   const [fnames,setFnames]=useState({plan:"",roster:""});
@@ -183,7 +189,9 @@ function SmartBrief() {
   const setF = (k,f) => { if(!f) return; setFiles(p=>({...p,[k]:f})); setFnames(p=>({...p,[k]:f.name})); };
 
   const analyze = async () => {
+    if(!apiKey.trim()){setErr("Ingresá tu API key de Anthropic."); return;}
     if(!files.plan&&!files.roster){setErr("Cargá al menos un PDF."); return;}
+    ANTHROPIC_KEY = apiKey.trim();
     setErr(""); setLoad(true);
     try{
       const content=[];
@@ -258,6 +266,21 @@ Reglas: std=STD de cada tramo, sta=STA, horaPresentacion=report time primer tram
       </div>
       <div style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:20,padding:40,width:"100%",maxWidth:500}}>
         <div style={{fontSize:10,color:C.mut,marginBottom:24,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700}}>Configuración</div>
+
+        {/* API Key */}
+        <div style={{marginBottom:22}}>
+          <div style={{fontSize:10,color:C.mut,marginBottom:7,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>🔑 Anthropic API Key</div>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e=>setApiKey(e.target.value)}
+            placeholder="sk-ant-api03-..."
+            style={{width:"100%",padding:"12px 16px",background:C.surf2,border:`1px solid ${apiKey?C.acc:C.brd}`,borderRadius:12,color:C.txt,fontSize:13,fontFamily:"monospace",outline:"none"}}
+          />
+          <div style={{fontSize:10,color:C.mut,marginTop:6,lineHeight:1.6}}>
+            Obtenela en <a href="https://console.anthropic.com" target="_blank" style={{color:C.acc}}>console.anthropic.com</a> → API Keys. Se usa solo localmente, no se guarda en ningún servidor.
+          </div>
+        </div>
         <div style={{marginBottom:22}}>
           <div style={{fontSize:10,color:C.mut,marginBottom:7,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Aerolínea</div>
           <select value={airline?.iata||""} onChange={e=>setAirline(AIRLINES.find(x=>x.iata===e.target.value)||null)}
