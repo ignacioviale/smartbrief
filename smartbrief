@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#07091a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="SmartBrief"/>
+<title>SmartBrief</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07091a;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+
+const { useState, useRef } = React;
+
+// ── Glosario aeropuertos ─────────────────────────────────────────────
+const AIRPORTS = {
+  AEP:"Aeroparque",BRC:"Bariloche",COR:"Córdoba",CPC:"Chapelco",
+  EZE:"Ezeiza",FLN:"Florianópolis",GIG:"Río de Janeiro",IGR:"Iguazú",
+  LIM:"Lima",MDZ:"Mendoza",NQN:"Neuquén",SCL:"Santiago de Chile",
+  SLA:"Salta",TUC:"Tucumán",USH:"Ushuaia",CNQ:"Corrientes",
+  FTE:"Calafate",JUJ:"Jujuy",POA:"Porto Alegre",GRU:"Guarulhos",
+  POS:"Posadas",NAT:"Natal",MVD:"Montevideo",LSC:"La Serena",
+  IQQ:"Iquique",CJC:"Calama",CWB:"Curitiba",ASU:"Asunción",
+  CRD:"Comodoro",REC:"Recife",RES:"Resistencia",REL:"Trelew"
+};
+const apt = c => c ? (AIRPORTS[c.trim().toUpperCase()] || c) : null;
+
+const ICAO = {
+  AEP:"SABE",EZE:"SAEZ",COR:"SACO",MDZ:"SAME",BRC:"SAZS",TUC:"SANT",
+  SLA:"SASA",NQN:"SAZN",USH:"SAWH",IGR:"SARI",FTE:"SAWC",JUJ:"SASJ",
+  CPC:"SAZC",CNQ:"SARC",POS:"SARP",RES:"SARE",REL:"SAVT",CRD:"SAVC",
+  SCL:"SCEL",MVD:"SUMU",ASU:"SGAS",POA:"SBPA",GRU:"SBGR",CWB:"SBCT",
+  FLN:"SBFL",GIG:"SBGL",REC:"SBRF",NAT:"SBNT",LIM:"SPJC",
+  IQQ:"SCIQ",CJC:"SCCF",LSC:"SCSE"
+};
+
+const COORDS = {
+  AEP:[-34.5592,-58.4156],BRC:[-41.1512,-71.1578],COR:[-31.3236,-64.208],
+  CPC:[-40.075,-71.1372],EZE:[-34.8222,-58.5358],FLN:[-27.6703,-48.5472],
+  GIG:[-22.8099,-43.2505],IGR:[-25.7373,-54.4734],LIM:[-12.0219,-77.1143],
+  MDZ:[-32.8316,-68.7926],NQN:[-38.949,-68.1557],SCL:[-33.393,-70.7858],
+  SLA:[-24.856,-65.4862],TUC:[-26.8409,-65.1049],USH:[-54.8433,-68.2958],
+  CNQ:[-27.4455,-58.7619],FTE:[-50.2803,-72.0531],JUJ:[-24.3928,-65.0978],
+  POA:[-29.9944,-51.1714],GRU:[-23.4356,-46.4731],POS:[-27.3858,-55.9707],
+  NAT:[-5.9114,-35.2477],MVD:[-34.8384,-56.0308],LSC:[-29.9162,-71.1995],
+  IQQ:[-20.5353,-70.1813],CJC:[-22.4981,-68.9036],CWB:[-25.5285,-49.1758],
+  ASU:[-25.2398,-57.5198],CRD:[-45.7853,-67.4655],REC:[-8.1265,-34.9235],
+  RES:[-27.45,-59.0564],REL:[-43.2105,-65.2703]
+};
+
+const AIRLINES = [
+  {name:"Aerolíneas Argentinas",iata:"AR"},{name:"Flybondi",iata:"FO"},
+  {name:"JetSmart",iata:"JA"},{name:"Emirates",iata:"EK"},
+  {name:"Qatar Airways",iata:"QR"},{name:"Singapore Airlines",iata:"SQ"},
+  {name:"ANA (All Nippon Airways)",iata:"NH"},{name:"Cathay Pacific",iata:"CX"},
+  {name:"Turkish Airlines",iata:"TK"},{name:"Air France",iata:"AF"},
+  {name:"Lufthansa",iata:"LH"},{name:"British Airways",iata:"BA"},
+  {name:"Delta Air Lines",iata:"DL"},{name:"LATAM Airlines",iata:"LA"},
+];
+const logoUrl = iata => `https://images.kiwi.com/airlines/128/${iata}.png`;
+
+const SVC_TABLE = [
+  {from:0,to:239,vals:[9,9,9,9,9,9,9]},
+  {from:240,to:299,vals:[10,10,10,10,9,9,9]},
+  {from:300,to:359,vals:[12,12,12,12,11.5,11,10.5]},
+  {from:360,to:419,vals:[13,13,12,12,12.5,12,11.5]},
+  {from:420,to:719,vals:[14,14,13,13,12.5,12,11.5]},
+  {from:720,to:779,vals:[13,13,13,13,12.5,12,11.5]},
+  {from:780,to:1019,vals:[12,12,12,12,11.5,11,10.5]},
+  {from:1020,to:1319,vals:[12,12,11,11,10,9,9]},
+  {from:1320,to:1379,vals:[11,11,10,10,9,9,9]},
+  {from:1380,to:1439,vals:[10,10,9,9,9,9,9]},
+];
+
+const toMins = t => { if(!t) return null; const m=t.match(/(\d{1,2})[:\s](\d{2})/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
+const fmtT = m => { if(m==null) return null; const n=((m%1440)+1440)%1440; return `${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`; };
+const addMin = (t,d) => { const b=toMins(t); return b!==null?fmtT(b+d):null; };
+const diffMins = (a,b) => { const x=toMins(a),y=toMins(b); return x!==null&&y!==null?((y-x+1440)%1440):null; };
+const fmtDur = m => m!==null?`${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}m`:null;
+const windDir = d => { if(d==null) return "—"; return ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"][Math.round(d/22.5)%16]; };
+const visLabel = v => v==null?"—":v>=10000?"≥10 km":`${(v/1000).toFixed(1)} km`;
+const maxSvcMins = (rt,segs=1) => { const h=toMins(rt); if(h===null) return null; const row=SVC_TABLE.find(r=>h>=r.from&&h<=r.to); return row?row.vals[Math.min(Math.max(segs-1,0),6)]*60:null; };
+
+const extractJSON = str => {
+  const findBlock = (s,open,close) => {
+    const start=s.indexOf(open); if(start===-1) return null;
+    let depth=0,inStr=false,esc=false;
+    for(let i=start;i<s.length;i++){
+      const c=s[i];
+      if(esc){esc=false;continue;} if(c==='\\'&&inStr){esc=true;continue;}
+      if(c==='"'){inStr=!inStr;continue;} if(inStr) continue;
+      if(c===open) depth++; else if(c===close){depth--;if(depth===0) return s.slice(start,i+1);}
+    } return null;
+  };
+  const obj=findBlock(str,'{','}'), arr=findBlock(str,'[',']');
+  if(obj&&arr) return JSON.parse(str.indexOf('{') < str.indexOf('[') ? obj : arr);
+  if(obj) return JSON.parse(obj); if(arr) return JSON.parse(arr);
+  throw new Error("No se encontró JSON válido");
+};
+
+const API_URL = "https://api.anthropic.com/v1/messages";
+const API_MODEL = "claude-sonnet-4-20250514";
+
+const callClaude = async (prompt, withSearch=false, extraHeaders={}) => {
+  const messages = [{role:"user", content:prompt}];
+  const tools = withSearch ? [{type:"web_search_20250305",name:"web_search"}] : [];
+  for(let i=0;i<6;i++){
+    const body = {model:API_MODEL, max_tokens:2000, messages};
+    if(tools.length) body.tools = tools;
+    const res = await fetch(API_URL, {
+      method:"POST", headers:{"Content-Type":"application/json",...extraHeaders},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e?.error?.message||`HTTP ${res.status}`); }
+    const j = await res.json();
+    if(!j?.content) throw new Error("Respuesta vacía");
+    if(j.stop_reason==="end_turn") return j.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+    if(j.stop_reason==="tool_use"){
+      messages.push({role:"assistant",content:j.content});
+      const results = j.content.filter(b=>b.type==="tool_use").map(b=>({type:"tool_result",tool_use_id:b.id,content:"ok"}));
+      messages.push({role:"user",content:results}); continue;
+    }
+    const txt = j.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+    if(txt) return txt;
+    throw new Error(`stop_reason: ${j.stop_reason}`);
+  }
+  throw new Error("Demasiadas iteraciones");
+};
+
+const C = {bg:"#07091a",surf:"#0d1228",surf2:"#0a0f24",brd:"#1a2540",acc:"#4d9fff",txt:"#e2e8f8",mut:"#667799",grn:"#22d3a4",warn:"#f59e0b"};
+
+const InfoCard = ({label,value,sub,accent,mono=true}) => (
+  <div style={{padding:"12px 16px",background:C.surf2,borderRadius:10,border:`1px solid ${accent?C.acc+"44":C.brd}`}}>
+    <div style={{fontSize:10,color:C.mut,letterSpacing:1.2,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{label}</div>
+    <div style={{fontSize:14,fontWeight:700,color:value?(accent?C.acc:C.txt):C.mut,fontFamily:mono?"monospace":"system-ui",lineHeight:1.2}}>{value||"—"}</div>
+    {sub&&<div style={{fontSize:11,color:C.mut,marginTop:3,fontFamily:"monospace"}}>{sub}</div>}
+  </div>
+);
+
+const CHK_INIT = {condiciones:false,documentacion:false,paxEspeciales:false,combustible:false,turbulencia:false,palabraClave:false,keypad:false,crm:false};
+const CHK1 = [{k:"condiciones",label:"¿Estamos todos en condiciones de volar?",icon:"👥"},{k:"documentacion",label:"Documentación revisada",icon:"📄"}];
+const CHK2 = [
+  {k:"paxEspeciales",label:"Pasajeros con necesidades especiales",icon:"♿"},
+  {k:"combustible",label:"Carga de combustible",icon:"⛽"},
+  {k:"turbulencia",label:"Pronóstico de turbulencia",icon:"🌪"},
+  {k:"palabraClave",label:"Procedimiento y palabra clave de acceso a la cabina",icon:"🔑"},
+  {k:"keypad",label:"Repaso de clave keypad",icon:"🔢"},
+  {k:"crm",label:"CRM final como clave del éxito",icon:"🤝"},
+];
+
+function SmartBrief() {
+  const [phase,setPhase]=useState("upload");
+  const [files,setFiles]=useState({plan:null,roster:null});
+  const [fnames,setFnames]=useState({plan:"",roster:""});
+  const [airline,setAirline]=useState(null);
+  const [loading,setLoad]=useState(false);
+  const [data,setData]=useState(null);
+  const [idx,setIdx]=useState(0);
+  const [chk,setChk]=useState(CHK_INIT);
+  const [sec,setSec]=useState("flight");
+  const [wxSub,setWxSub]=useState("meteo");
+  const [satBand,setSatBand]=useState("GEOCOLOR");
+  const [satSector,setSatSector]=useState("ssa");
+  const [satTs,setSatTs]=useState(Date.now());
+  const [wxData,setWxData]=useState(null);
+  const [metarData,setMetarData]=useState(null);
+  const [wxLoad,setWxLoad]=useState(false);
+  const [wxErr,setWxErr]=useState("");
+  const [err,setErr]=useState("");
+  const planRef=useRef(), rosterRef=useRef();
+
+  const toB64 = f => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(f); });
+  const setF = (k,f) => { if(!f) return; setFiles(p=>({...p,[k]:f})); setFnames(p=>({...p,[k]:f.name})); };
+
+  const analyze = async () => {
+    if(!files.plan&&!files.roster){setErr("Cargá al menos un PDF."); return;}
+    setErr(""); setLoad(true);
+    try{
+      const content=[];
+      for(const f of [files.plan,files.roster]) if(f){ const b=await toB64(f); content.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:b}}); }
+      content.push({type:"text",text:`Sos experto en documentos de aviación comercial argentina. Analizá los PDFs adjuntos.
+Respondé ÚNICAMENTE con JSON válido, sin markdown ni texto adicional:
+{"tramos":[{"numeroVuelo":"AR1234","origen":"AEP","destino":"COR","alternativa":"ROS","std":"09:15","sta":"10:35","horaPresentacion":"08:00","matricula":"LV-XXX","tipoAeronave":"Boeing 737-800","pasajeros":156}],"oxigeno":"22 min","tramosProximos":[{"origen":"COR","destino":"IGR","std":"11:30","sta":"13:00","pasajeros":120}],"tripulacion":[{"pos":"Captain","nombre":"García, Juan"},{"pos":"First Officer","nombre":"López, María"},{"pos":"TS","nombre":"Fernández, Carlos"}]}
+Reglas: std=STD de cada tramo, sta=STA, horaPresentacion=report time primer tramo, oxigeno=campo OXYGEN del plan, pasajeros=columna Y de nómina. Tripulación: comandante->Captain, copiloto->First Officer, resto usar código exacto columna POS. Códigos IATA 3 letras. null para no encontrados. TODOS los tramos en orden cronológico.`});
+      const res = await fetch(API_URL, {
+        method:"POST", headers:{"Content-Type":"application/json","anthropic-beta":"pdfs-2024-08-06"},
+        body:JSON.stringify({model:API_MODEL,max_tokens:1500,messages:[{role:"user",content}]})
+      });
+      if(!res.ok){ const e=await res.json(); throw new Error(e?.error?.message||`HTTP ${res.status}`); }
+      const j=await res.json();
+      if(!j?.content) throw new Error("Respuesta vacía");
+      setData(extractJSON(j.content.map(i=>i.text||"").join("")));
+      setPhase("select");
+    }catch(e){ setErr(`Error: ${e.message}`); }
+    finally{ setLoad(false); }
+  };
+
+  const getAptList = leg => [
+    {code:leg.origen,role:"ORIGEN",color:C.acc},
+    {code:leg.destino,role:"DESTINO",color:C.grn},
+    leg.alternativa?{code:leg.alternativa,role:"ALTERNATIVA",color:C.warn}:null
+  ].filter(a=>a&&a.code&&COORDS[a.code]);
+
+  const fetchWeather = async leg => {
+    setWxLoad(true); setWxData(null); setMetarData(null); setWxErr("");
+    const apts = getAptList(leg);
+    if(!apts.length){ setWxLoad(false); return; }
+    try{
+      const aptNames = apts.map(a=>`${ICAO[a.code]||a.code} (${apt(a.code)||a.code})`).join(", ");
+      const raw = await callClaude(
+        `Sos un sistema meteorológico aeronáutico. Proporcioná datos meteorológicos actuales estimados para estos aeropuertos: ${aptNames}.\n`+
+        `Respondé ÚNICAMENTE con este JSON:\n`+
+        `{"metars":{"SABE":{"raw":"SABE 171200Z 18010KT 9999 FEW020 18/10 Q1013 NOSIG","temp":18,"dewPoint":10,"windDir":180,"windSpd":10,"windGusts":null,"vis":9999,"cloudCode":"FEW","cloudBase":2000,"pressure":1013,"flightRule":"VFR","observed":"${new Date().toISOString()}"}}}`,
+        false
+      );
+      const parsed = extractJSON(raw);
+      const metarsData = parsed?.metars || {};
+      setWxData(apts.map(({code,role,color})=>{
+        const icao=ICAO[code]||code; const m=metarsData[icao]||{};
+        return{code,role,color,name:apt(code),source:"Estimado",
+          temp2m:m.temp??null,dewPoint:m.dewPoint??null,windSpd:m.windSpd??null,
+          windDir:m.windDir??null,windGusts:m.windGusts??null,vis:m.vis??null,
+          cloudCover:m.cloudCode??null,cloudBase:m.cloudBase??null,
+          pressure:m.pressure??null,flightRule:m.flightRule??null,
+          obsTime:m.observed??null,rawMetar:m.raw??null};
+      }));
+      const mm={};
+      Object.entries(metarsData).forEach(([icao,m])=>{ mm[icao]={metar:{raw_text:m.raw,observed:m.observed}}; });
+      setMetarData(mm);
+    }catch(e){ setWxErr(`Error: ${e.message}`); }
+    finally{ setWxLoad(false); }
+  };
+
+  const goTo = i => {
+    const leg=data?.tramos?.[i]||{};
+    setIdx(i); setChk(CHK_INIT); setSec("flight");
+    setWxData(null); setMetarData(null); setWxErr(""); setPhase("dashboard");
+    setTimeout(()=>fetchWeather(leg),100);
+  };
+
+  // ── UPLOAD ────────────────────────────────────────────────────────────
+  if(phase==="upload") return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,sans-serif",color:C.txt,padding:24}}>
+      <div style={{marginBottom:44,textAlign:"center"}}>
+        <div style={{fontSize:10,letterSpacing:5,color:C.acc,marginBottom:12,fontWeight:700}}>✈ SOLUCIONES AERONÁUTICAS ARGENTINAS</div>
+        <div style={{fontSize:54,fontWeight:900,letterSpacing:-2,lineHeight:1}}>Smart<span style={{color:C.acc}}>Brief</span></div>
+        <div style={{fontSize:13,color:C.mut,marginTop:12}}>Briefing digital para pilotos de línea aérea</div>
+      </div>
+      <div style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:20,padding:40,width:"100%",maxWidth:500}}>
+        <div style={{fontSize:10,color:C.mut,marginBottom:24,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700}}>Configuración</div>
+        <div style={{marginBottom:22}}>
+          <div style={{fontSize:10,color:C.mut,marginBottom:7,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Aerolínea</div>
+          <select value={airline?.iata||""} onChange={e=>setAirline(AIRLINES.find(x=>x.iata===e.target.value)||null)}
+            style={{width:"100%",padding:"12px 16px",background:C.surf2,border:`1px solid ${airline?C.acc:C.brd}`,borderRadius:12,color:airline?C.txt:C.mut,fontSize:13,fontFamily:"system-ui",outline:"none",cursor:"pointer",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667799' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"calc(100% - 14px) center"}}>
+            <option value="">Seleccioná tu aerolínea...</option>
+            {AIRLINES.map(a=><option key={a.iata} value={a.iata}>{a.name}</option>)}
+          </select>
+        </div>
+        <div style={{fontSize:10,color:C.mut,marginBottom:16,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700}}>Documentos de vuelo</div>
+        {[{k:"plan",ref:planRef,icon:"🗺",label:"Plan de vuelo",desc:"OFP / Flight Plan PDF"},
+          {k:"roster",ref:rosterRef,icon:"📋",label:"Nómina y horarios",desc:"Crew list / Schedule PDF"}].map(({k,ref,icon,label,desc})=>(
+          <div key={k} style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:C.mut,marginBottom:6,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>{label}</div>
+            <div onClick={()=>ref.current.click()} style={{border:`1px dashed ${files[k]?C.acc:C.brd}`,borderRadius:12,padding:"13px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,background:files[k]?"rgba(77,159,255,0.05)":"rgba(255,255,255,0.01)"}}>
+              <span style={{fontSize:20}}>{files[k]?"✅":icon}</span>
+              <div><div style={{fontSize:13,color:files[k]?C.acc:C.txt,fontWeight:500}}>{fnames[k]||"Seleccionar archivo..."}</div><div style={{fontSize:11,color:C.mut,marginTop:2}}>{desc}</div></div>
+            </div>
+            <input ref={ref} type="file" accept=".pdf" style={{display:"none"}} onChange={e=>setF(k,e.target.files[0])}/>
+          </div>
+        ))}
+        {err&&<div style={{fontSize:12,color:"#f87171",margin:"14px 0",padding:"10px 14px",background:"rgba(248,113,113,0.08)",borderRadius:8,border:"1px solid rgba(248,113,113,0.15)"}}>{err}</div>}
+        <button onClick={analyze} disabled={loading} style={{width:"100%",marginTop:16,padding:16,background:loading?"#1a2540":C.acc,border:"none",borderRadius:12,color:"#fff",fontWeight:700,fontSize:14,cursor:loading?"not-allowed":"pointer"}}>
+          {loading?"⏳  Analizando con IA...":"Analizar documentos →"}
+        </button>
+      </div>
+      <div style={{fontSize:11,color:"#2a3555",marginTop:28}}>SmartBrief v1.0 · Uso exclusivo para personal aeronáutico habilitado</div>
+    </div>
+  );
+
+  // ── SELECT ────────────────────────────────────────────────────────────
+  if(phase==="select") return(
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"system-ui,sans-serif",color:C.txt,padding:24}}>
+      <div style={{maxWidth:660,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:32,paddingTop:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:18}}>
+            {airline&&<img src={logoUrl(airline.iata)} alt={airline.name} onError={e=>e.target.style.display="none"} style={{height:52,objectFit:"contain",filter:"brightness(0) invert(1)",flexShrink:0}}/>}
+            <div>
+              {airline?<div style={{fontSize:10,color:C.acc,letterSpacing:4,fontWeight:700,marginBottom:4}}>{airline.name.toUpperCase()}</div>
+                      :<div style={{fontSize:10,color:C.acc,letterSpacing:5,fontWeight:700,marginBottom:4}}>✈ SMARTBRIEF</div>}
+              <div style={{fontSize:26,fontWeight:800}}>Selección de tramo</div>
+            </div>
+          </div>
+          <button onClick={()=>setPhase("upload")} style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:8,color:C.mut,padding:"8px 14px",cursor:"pointer",fontSize:12,flexShrink:0}}>← Nueva carga</button>
+        </div>
+        <div style={{fontSize:10,color:C.mut,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700,marginBottom:14}}>
+          {data.tramos.length} tramo{data.tramos.length!==1?"s":""} detectado{data.tramos.length!==1?"s":""}
+        </div>
+        {data.tramos.map((t,i)=>(
+          <div key={i} onClick={()=>goTo(i)} style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:14,padding:"18px 22px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:16}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=C.acc;e.currentTarget.style.background="rgba(77,159,255,0.05)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.brd;e.currentTarget.style.background=C.surf;}}>
+            <div style={{width:46,height:46,borderRadius:12,background:"rgba(77,159,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>✈</div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                <span style={{fontSize:18,fontWeight:800,fontFamily:"monospace",color:C.acc}}>{t.numeroVuelo||"—"}</span>
+                <span style={{fontSize:11,color:C.mut,background:C.brd,padding:"2px 8px",borderRadius:20,fontWeight:600}}>{t.tipoAeronave||"—"}</span>
+                {t.pasajeros&&<span style={{fontSize:11,color:C.grn,background:"rgba(34,211,164,0.1)",padding:"2px 8px",borderRadius:20,fontWeight:700,border:"1px solid rgba(34,211,164,0.25)"}}>{t.pasajeros} pax</span>}
+              </div>
+              <div style={{fontSize:16,fontWeight:700}}>{apt(t.origen)||"—"} <span style={{color:C.mut,fontWeight:400}}>→</span> {apt(t.destino)||"—"}</div>
+              <div style={{fontSize:13,color:C.mut,marginTop:4,fontFamily:"monospace"}}>STD {t.std||"—"} · {t.std&&t.sta?fmtDur(diffMins(t.std,t.sta)):"—"}</div>
+            </div>
+            <div style={{color:C.mut,fontSize:22}}>›</div>
+          </div>
+        ))}
+        {data.tripulacion&&data.tripulacion.length>0&&(
+          <div style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:14,padding:"18px 22px",marginTop:8}}>
+            <div style={{fontSize:10,color:C.mut,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700,marginBottom:14}}>Tripulación de vuelo</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+              {data.tripulacion.map((m,i)=>(
+                <div key={i} style={{background:C.surf2,borderRadius:10,padding:"10px 14px",border:`1px solid ${C.brd}`}}>
+                  <div style={{fontSize:10,color:m.pos==="Captain"?C.acc:m.pos==="First Officer"?C.grn:C.mut,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:3}}>{m.pos}</div>
+                  <div style={{fontSize:m.pos==="Captain"?15:13,fontWeight:m.pos==="Captain"?800:600,color:C.txt}}>{m.nombre||"—"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── DASHBOARD ─────────────────────────────────────────────────────────
+  const leg=data?.tramos?.[idx]||{};
+  const nLegs=data?.tramos?.length||1;
+  const reportTime=data?.tramos?.[0]?.horaPresentacion||null;
+  const horaEmbarque=addMin(leg.std,-39);
+  const maxSvc=maxSvcMins(reportTime,nLegs);
+  const ultimoAterrizaje=maxSvc?addMin(reportTime,maxSvc):null;
+  const ultimoAterRec=maxSvc?addMin(reportTime,maxSvc-15):null;
+  const svcTotal=(toMins(ultimoAterrizaje)!==null&&toMins(reportTime)!==null)?fmtDur(((toMins(ultimoAterrizaje)-toMins(reportTime)+1440)%1440)):null;
+  const allChk1=CHK1.every(c=>chk[c.k]);
+  const allChk=CHK1.concat(CHK2).every(c=>chk[c.k]);
+  const originCoords=leg.origen&&COORDS[leg.origen]?COORDS[leg.origen]:[-34,-64];
+  const windyBase=`https://embed.windy.com/embed2.html?lat=${originCoords[0]}&lon=${originCoords[1]}&zoom=5&level=surface&menu=&message=true&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=kt&metricTemp=%C2%B0C&radarRange=-1`;
+
+  const ChkItem=({k,label,icon})=>(
+    <div onClick={()=>setChk(p=>({...p,[k]:!p[k]}))} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",borderRadius:10,cursor:"pointer",marginBottom:8,background:chk[k]?"rgba(34,211,164,0.06)":"rgba(255,255,255,0.02)",border:`1px solid ${chk[k]?"rgba(34,211,164,0.3)":C.brd}`,transition:"all 0.15s"}}>
+      <div style={{width:22,height:22,borderRadius:6,flexShrink:0,border:`2px solid ${chk[k]?C.grn:C.brd}`,background:chk[k]?C.grn:"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#000",fontWeight:800}}>{chk[k]?"✓":""}</div>
+      <span style={{fontSize:18}}>{icon}</span>
+      <span style={{fontSize:14,fontWeight:500,color:chk[k]?C.grn:C.txt}}>{label}</span>
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"system-ui,sans-serif",color:C.txt}}>
+      <div style={{background:C.surf,borderBottom:`1px solid ${C.brd}`,padding:"13px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <button onClick={()=>setPhase("select")} style={{background:"transparent",border:`1px solid ${C.brd}`,borderRadius:8,color:C.mut,padding:"5px 12px",cursor:"pointer",fontSize:12}}>← Tramos</button>
+          {airline&&<img src={logoUrl(airline.iata)} alt={airline.name} onError={e=>e.target.style.display="none"} style={{height:28,objectFit:"contain",filter:"brightness(0) invert(1)"}}/>}
+          <div>
+            <span style={{fontSize:10,color:C.mut,letterSpacing:3,fontWeight:600}}>SMARTBRIEF{airline?` · ${airline.name}`:""} · </span>
+            <span style={{fontSize:15,fontWeight:800,fontFamily:"monospace",color:C.acc}}>{leg.numeroVuelo||"—"}</span>
+            <span style={{fontSize:13,color:C.mut,marginLeft:8}}>{apt(leg.origen)} → {apt(leg.destino)}</span>
+          </div>
+        </div>
+        <div style={{fontSize:11,color:C.mut,fontFamily:"monospace"}}>{new Date().toLocaleString("es-AR",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"})}</div>
+      </div>
+      <div style={{display:"flex",background:C.surf,borderBottom:`1px solid ${C.brd}`}}>
+        {[["flight","✈  Dashboard de vuelo"],["weather","🌤  Info meteorológica"]].map(([k,lb])=>(
+          <button key={k} onClick={()=>setSec(k)} style={{padding:"12px 22px",background:"transparent",border:"none",cursor:"pointer",color:sec===k?C.acc:C.mut,fontWeight:sec===k?700:400,fontSize:13,borderBottom:sec===k?`2px solid ${C.acc}`:"2px solid transparent"}}>{lb}</button>
+        ))}
+      </div>
+
+      <div style={{padding:"20px 22px",maxWidth:900,margin:"0 auto"}}>
+        {sec==="flight"?(
+          <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+              <InfoCard label="Vuelo" value={leg.numeroVuelo} accent/>
+              <InfoCard label="Origen" value={apt(leg.origen)} sub={leg.origen}/>
+              <InfoCard label="Destino" value={apt(leg.destino)} sub={leg.destino}/>
+              <InfoCard label="Alternativa" value={apt(leg.alternativa)} sub={leg.alternativa}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:10,marginBottom:10}}>
+              <InfoCard label="Tipo de aeronave" value={leg.tipoAeronave} mono={false}/>
+              <InfoCard label="Matrícula" value={leg.matricula}/>
+              <InfoCard label="Tiempo de oxígeno" value={data.oxigeno}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+              <InfoCard label="Presentación (Report)" value={reportTime}/>
+              <InfoCard label="Embarque de pasajeros" value={horaEmbarque} sub="STD − 39 min"/>
+              <InfoCard label="Despegue (STD)" value={leg.std}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:C.mut,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Tiempo de vuelo por tramo</div>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(data.tramos.length,4)},1fr)`,gap:10}}>
+                {data.tramos.slice(0,4).map((t,i)=>{
+                  const mins=diffMins(t.std,t.sta);
+                  return(
+                    <div key={i} style={{padding:"12px 14px",background:i===idx?"rgba(77,159,255,0.08)":C.surf2,borderRadius:10,border:`1px solid ${i===idx?C.acc+"66":C.brd}`}}>
+                      <div style={{fontSize:10,color:C.mut,fontWeight:700,marginBottom:4}}>{t.origen||"—"} → {t.destino||"—"}</div>
+                      <div style={{fontSize:14,fontWeight:700,fontFamily:"monospace",color:C.txt}}>{mins!==null?fmtDur(mins):"—"}</div>
+                      <div style={{fontSize:10,color:C.mut,marginTop:2,fontFamily:"monospace"}}>{t.std||"—"} → {t.sta||"—"}</div>
+                      {t.pasajeros&&<div style={{fontSize:11,color:C.grn,fontWeight:700,marginTop:5}}>{t.pasajeros} pax</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:18}}>
+              <InfoCard label="Tiempo de servicio total" value={svcTotal} sub="Desde presentación"/>
+              <div style={{padding:"12px 16px",background:C.surf2,borderRadius:10,border:"1px solid #f59e0b44"}}>
+                <div style={{fontSize:10,color:C.mut,letterSpacing:1.2,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Último aterrizaje: chocks on</div>
+                <div style={{fontSize:14,fontWeight:700,color:ultimoAterrizaje?C.warn:C.mut,fontFamily:"monospace"}}>{ultimoAterrizaje||"—"}</div>
+                <div style={{fontSize:10,color:C.mut,marginTop:3,fontFamily:"monospace"}}>Art. 10 · Dec. 378/2025 · {nLegs} seg.</div>
+              </div>
+              <div style={{padding:"12px 16px",background:C.surf2,borderRadius:10,border:"1px solid rgba(34,211,164,0.25)"}}>
+                <div style={{fontSize:10,color:C.mut,letterSpacing:1.2,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Último aterrizaje recomendado</div>
+                <div style={{fontSize:14,fontWeight:700,color:ultimoAterRec?C.grn:C.mut,fontFamily:"monospace"}}>{ultimoAterRec||"—"}</div>
+                <div style={{fontSize:10,color:C.mut,marginTop:3,fontFamily:"monospace"}}>Considera 15 min de taxi</div>
+              </div>
+            </div>
+            <div style={{background:C.surf,border:`1px solid ${C.brd}`,borderRadius:14,padding:"18px 22px"}}>
+              <div style={{fontSize:10,color:C.mut,letterSpacing:2.5,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>Checklist de briefing</div>
+              <div style={{fontSize:10,color:C.acc,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,marginTop:14,borderBottom:`1px solid ${C.brd}`,paddingBottom:6}}>1 — Condiciones generales</div>
+              {CHK1.map(c=><ChkItem key={c.k} {...c}/>)}
+              {allChk1&&<div style={{marginBottom:4,padding:"8px 14px",background:"rgba(77,159,255,0.06)",border:"1px solid rgba(77,159,255,0.2)",borderRadius:8,fontSize:12,color:C.acc,fontWeight:600}}>✓ Condiciones generales confirmadas</div>}
+              <div style={{fontSize:10,color:C.grn,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,marginTop:16,borderBottom:`1px solid ${C.brd}`,paddingBottom:6}}>2 — Briefing operacional</div>
+              {CHK2.map(c=><ChkItem key={c.k} {...c}/>)}
+              {allChk&&<div style={{marginTop:12,padding:"12px 16px",background:"rgba(34,211,164,0.08)",border:"1px solid rgba(34,211,164,0.25)",borderRadius:10,fontSize:14,color:C.grn,fontWeight:700,textAlign:"center"}}>✅ Briefing completo — ¡Listo para operar!</div>}
+            </div>
+          </>
+        ):(
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
+              {[["meteo","🌡 Condiciones"],["metar","📋 METAR / TAF"],["satelite","🛰 Satélite"],["radar","📡 Radar"]].map(([k,lb])=>(
+                <button key={k} onClick={()=>setWxSub(k)} style={{padding:"9px 18px",background:wxSub===k?C.acc:"transparent",border:`1px solid ${wxSub===k?C.acc:C.brd}`,borderRadius:20,color:wxSub===k?"#fff":C.mut,fontWeight:wxSub===k?700:400,fontSize:12,cursor:"pointer"}}>{lb}</button>
+              ))}
+              {wxLoad&&<span style={{fontSize:12,color:C.mut,marginLeft:"auto"}}>⏳ Cargando...</span>}
+              {wxData&&!wxLoad&&(wxSub==="meteo"||wxSub==="metar")&&(
+                <button onClick={()=>fetchWeather(leg)} style={{padding:"9px 14px",background:"transparent",border:`1px solid ${C.brd}`,borderRadius:20,color:C.mut,fontSize:11,cursor:"pointer",marginLeft:"auto"}}>🔄 Actualizar</button>
+              )}
+            </div>
+            {wxErr&&<div style={{fontSize:12,color:"#f87171",padding:"10px 14px",background:"rgba(248,113,113,0.08)",borderRadius:8,border:"1px solid rgba(248,113,113,0.2)",marginBottom:14}}>{wxErr}</div>}
+
+            {wxSub==="meteo"&&(
+              !wxData?(
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:200,color:C.mut,textAlign:"center",background:C.surf,borderRadius:16,border:`1px solid ${C.brd}`}}>
+                  <div style={{fontSize:36,marginBottom:10}}>⏳</div>
+                  <div style={{fontSize:13,color:C.txt,fontWeight:600}}>Cargando condiciones meteorológicas...</div>
+                </div>
+              ):(
+                <div style={{display:"grid",gridTemplateColumns:`repeat(${wxData.length},1fr)`,gap:12}}>
+                  {wxData.map(w=>{
+                    const frc=w.flightRule==="VFR"?C.grn:w.flightRule==="MVFR"?"#60a5fa":w.flightRule==="IFR"?C.warn:"#f87171";
+                    return(
+                      <div key={w.code} style={{background:C.surf,border:`1px solid ${w.color}33`,borderRadius:16,overflow:"hidden"}}>
+                        <div style={{background:`linear-gradient(135deg,${w.color}18,${w.color}06)`,borderBottom:`1px solid ${C.brd}`,padding:"13px 16px",display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+                          <div>
+                            <div style={{fontSize:9,color:w.color,letterSpacing:2.5,fontWeight:700,marginBottom:3}}>{w.role}</div>
+                            <div style={{fontSize:22,fontWeight:900,fontFamily:"monospace",color:C.txt}}>{w.code}</div>
+                            <div style={{fontSize:11,color:C.mut,marginTop:1}}>{w.name}</div>
+                          </div>
+                          {w.flightRule&&<div style={{fontSize:11,fontWeight:800,color:frc,background:`${frc}22`,padding:"4px 10px",borderRadius:20,border:`1px solid ${frc}44`,marginTop:4}}>{w.flightRule}</div>}
+                        </div>
+                        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+                          {[
+                            {lb:"Temp.",v:w.temp2m!=null?`${Number(w.temp2m).toFixed(1)} °C`:null,ic:"🌡"},
+                            {lb:"Punto rocío",v:w.dewPoint!=null?`${Number(w.dewPoint).toFixed(1)} °C`:null,ic:"💧"},
+                            {lb:"Viento",v:w.windSpd!=null?`${Number(w.windSpd).toFixed(0)} kt`:null,sb:w.windDir!=null?`${windDir(w.windDir)} ${Math.round(w.windDir)}°`:null,ic:"💨"},
+                            {lb:"Ráfagas",v:w.windGusts!=null?`${Number(w.windGusts).toFixed(0)} kt`:null,ic:"🌬"},
+                            {lb:"Visibilidad",v:w.vis!=null?(w.vis>=9999?"≥10 km":`${(w.vis/1000).toFixed(1)} km`):null,ic:"👁"},
+                            {lb:"Nubes",v:w.cloudCover||null,sb:w.cloudBase!=null?`Base ${w.cloudBase} ft`:null,ic:"☁"},
+                            {lb:"Presión",v:w.pressure!=null?`${Number(w.pressure).toFixed(0)} hPa`:null,ic:"📊"},
+                            {lb:"Fuente",v:w.source||"Estimado",ic:"ℹ️"},
+                          ].map(({lb,v,sb,ic})=>(
+                            <div key={lb} style={{background:C.surf2,borderRadius:8,padding:"8px 10px",border:`1px solid ${C.brd}`}}>
+                              <div style={{fontSize:9,color:C.mut,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>{ic} {lb}</div>
+                              <div style={{fontSize:12,fontWeight:700,fontFamily:"monospace",color:v?C.txt:C.mut}}>{v||"—"}</div>
+                              {sb&&<div style={{fontSize:9,color:C.mut,marginTop:1}}>{sb}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+
+            {wxSub==="metar"&&(
+              !metarData?(
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:200,color:C.mut,textAlign:"center",background:C.surf,borderRadius:16,border:`1px solid ${C.brd}`}}>
+                  <div style={{fontSize:36,marginBottom:10}}>⏳</div>
+                  <div style={{fontSize:13,color:C.txt,fontWeight:600}}>Cargando METAR / TAF...</div>
+                </div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  {getAptList(leg).map(({code,role,color})=>{
+                    const icao=ICAO[code]; const wx=icao?metarData[icao]:null;
+                    return(
+                      <div key={code} style={{background:C.surf,border:`1px solid ${color}33`,borderRadius:14,overflow:"hidden"}}>
+                        <div style={{background:`linear-gradient(135deg,${color}18,${color}06)`,borderBottom:`1px solid ${C.brd}`,padding:"11px 18px",display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{fontSize:9,color,letterSpacing:2.5,fontWeight:700}}>{role}</div>
+                          <div style={{fontSize:18,fontWeight:900,fontFamily:"monospace",color:C.txt}}>{code}</div>
+                          {icao&&<div style={{fontSize:11,color:C.mut}}>ICAO: {icao}</div>}
+                          <div style={{fontSize:11,color:C.mut,marginLeft:"auto"}}>{apt(code)}</div>
+                        </div>
+                        <div style={{padding:"14px 18px"}}>
+                          <div style={{fontSize:10,color:C.acc,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>METAR</div>
+                          <div style={{fontFamily:"monospace",fontSize:12,color:C.txt,background:C.surf2,padding:"10px 14px",borderRadius:8,border:`1px solid ${C.brd}`,lineHeight:1.8,wordBreak:"break-all"}}>
+                            {wx?.metar?.raw_text||"Sin datos disponibles"}
+                          </div>
+                          {wx?.metar?.observed&&<div style={{fontSize:10,color:C.mut,marginTop:5}}>Obs: {new Date(wx.metar.observed).toLocaleString("es-AR")}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+
+            {wxSub==="satelite"&&(
+              <div>
+                <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+                  <div style={{display:"flex",gap:6}}>
+                    {[["ssa","Sur (Argentina)"],["nsa","Norte (SA)"]].map(([k,lb])=>(
+                      <button key={k} onClick={()=>setSatSector(k)} style={{padding:"7px 14px",background:satSector===k?C.acc:"transparent",border:`1px solid ${satSector===k?C.acc:C.brd}`,borderRadius:20,color:satSector===k?"#fff":C.mut,fontSize:11,cursor:"pointer",fontWeight:satSector===k?700:400}}>{lb}</button>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[["GEOCOLOR","GeoColor"],["Band13","IR"],["Band02","Visible"]].map(([k,lb])=>(
+                      <button key={k} onClick={()=>setSatBand(k)} style={{padding:"7px 14px",background:satBand===k?"#334155":"transparent",border:`1px solid ${satBand===k?"#64748b":C.brd}`,borderRadius:20,color:satBand===k?C.txt:C.mut,fontSize:11,cursor:"pointer"}}>{lb}</button>
+                    ))}
+                  </div>
+                  <button onClick={()=>setSatTs(Date.now())} style={{padding:"7px 14px",background:"transparent",border:`1px solid ${C.brd}`,borderRadius:20,color:C.mut,fontSize:11,cursor:"pointer",marginLeft:"auto"}}>🔄 Actualizar</button>
+                </div>
+                <div style={{borderRadius:14,overflow:"hidden",border:`1px solid ${C.brd}`,background:"#000"}}>
+                  <img key={satTs} src={`https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/${satSector}/${satBand}/1200x1200.jpg?t=${satTs}`} alt="GOES-19" style={{width:"100%",display:"block",objectFit:"contain"}}
+                    onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}/>
+                  <div style={{display:"none",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:300,color:C.mut,padding:24,textAlign:"center"}}>
+                    <div style={{fontSize:32,marginBottom:10}}>🛰</div>
+                    <div style={{fontSize:13,color:C.txt,fontWeight:600,marginBottom:6}}>Imagen no disponible</div>
+                    <a href={`https://www.star.nesdis.noaa.gov/goes/sector.php?sat=G19&sector=${satSector}`} target="_blank" rel="noopener noreferrer" style={{color:C.acc,fontSize:12}}>Ver en NOAA →</a>
+                  </div>
+                </div>
+                <div style={{fontSize:10,color:C.mut,marginTop:8,textAlign:"right"}}>🛰 GOES-19 · NOAA/NESDIS · Actualización cada 10 min</div>
+              </div>
+            )}
+
+            {wxSub==="radar"&&(
+              <div>
+                <div style={{fontSize:11,color:C.mut,marginBottom:10}}>📡 Radar meteorológico — centrado en {apt(leg.origen)||leg.origen}.</div>
+                <div style={{borderRadius:14,overflow:"hidden",border:`1px solid ${C.brd}`,height:500}}>
+                  <iframe src={`${windyBase}&overlay=radar`} width="100%" height="100%" frameBorder="0" title="Radar" style={{display:"block"}}/>
+                </div>
+                <div style={{fontSize:10,color:C.mut,marginTop:8,textAlign:"right"}}>Fuente: Windy.com</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(SmartBrief));
+</script>
+</body>
+</html>
